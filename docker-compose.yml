@@ -1,0 +1,92 @@
+services:
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3
+    container_name: rabbitmq
+    ports:
+      - 5672:5672
+      - 15672:15672
+    healthcheck:
+      test: [ "CMD", "rabbitmqctl", "status" ]
+      interval: 5s
+      timeout: 20s
+      retries: 5
+    networks:
+      - go
+
+  # Go services
+  go-publisher:
+    build:
+      context: .
+      dockerfile: .docker/publisher-Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - go
+
+  go-consumer:
+    build:
+      context: .
+      dockerfile: .docker/consumer-Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    networks:
+      - go
+
+  go-http:
+    build:
+      context: .
+      dockerfile: .docker/http-Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+    networks:
+      - go
+
+  # Postgres
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sample-app
+    healthcheck:
+      test: pg_isready
+      interval: 30s
+      timeout: 60s
+      retries: 5
+      start_period: 80s  
+    ports:
+      - 5432:5432
+    volumes:
+      - ./.dbscripts:/docker-entrypoint-initdb.d
+      - ./.postgres-data:/var/lib/postgresql/data
+    networks:
+      - go
+
+  # nginx
+  nginx:
+    build:
+      context: .
+      dockerfile: .docker/nginx-Dockerfile
+    container_name: nginx
+    depends_on:
+      go-http:
+        condition: service_started
+    ports:
+      - 80:80
+    networks:
+      - go
+
+networks:
+  go:

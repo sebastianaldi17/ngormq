@@ -1,0 +1,21 @@
+FROM golang:1.22 AS build-stage
+
+WORKDIR /app
+
+COPY . ./
+
+RUN go mod tidy
+
+RUN CGO_ENABLED=0 GOOS=linux go build -o /consumer cmd/http/main.go
+
+FROM gcr.io/distroless/base-debian11 AS run-stage
+
+WORKDIR /
+
+COPY --from=build-stage /consumer /consumer
+
+EXPOSE 3000
+
+USER nonroot:nonroot
+
+ENTRYPOINT [ "/consumer" ]
